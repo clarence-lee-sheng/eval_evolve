@@ -2,7 +2,7 @@ task: starter_mcq
 dataset_path: json
 dataset_kwargs:
   data_files:
-    test: tasks/starter_mcq/data.jsonl
+    test: tasks/lm_eval/starter_mcq/data.jsonl
 test_split: test
 output_type: multiple_choice
 doc_to_text: "Question: {{question}}\nAnswer:"

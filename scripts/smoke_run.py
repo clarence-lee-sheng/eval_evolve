@@ -1,16 +1,21 @@
-"""Cheap verification helper.
+"""Harness-agnostic smoke-run dispatcher.
 
-Runs an lm-eval task on a tiny sample with a configurable model, then emits
-a markdown report the agent can paste into a PR description.
+Given a task directory under `tasks/<harness>/<task>/`, identify the harness,
+delegate to `harnesses/<harness>/smoke.sh`, then render a markdown report from
+the harness's output for inclusion in a PR description.
+
+The dispatcher itself is harness-agnostic: it figures out which harness a task
+belongs to by reading the path, and trusts each harness's smoke.sh to know how
+to run that framework. Adding a new harness = adding a new directory under
+`harnesses/`, no edits here required.
 
 Typical use from the agent:
 
     uv run python scripts/smoke_run.py \\
-        --task starter_mcq \\
-        --include-path tasks/starter_mcq \\
+        --task tasks/lm_eval/starter_mcq \\
         --model dummy \\
         --limit 5 \\
-        --out reports/smoke_starter_mcq.md
+        --out out/reports/starter_mcq.md
 """
 
 from __future__ import annotations
@@ -21,48 +26,62 @@ import subprocess
 import sys
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
-def run_lm_eval(task: str, include_path: str, model: str, limit: int, output_dir: Path) -> dict:
+
+def identify_harness(task_dir: Path) -> str:
+    """Pick the harness from the task path: tasks/<harness>/<task>/."""
+    parts = task_dir.resolve().relative_to(REPO_ROOT).parts
+    if len(parts) < 3 or parts[0] != "tasks":
+        raise SystemExit(
+            f"Task path must look like tasks/<harness>/<task>/; got {task_dir}"
+        )
+    return parts[1]
+
+
+def harness_smoke_script(harness: str) -> Path:
+    script = REPO_ROOT / "harnesses" / harness / "smoke.sh"
+    if not script.exists():
+        raise SystemExit(
+            f"No smoke.sh for harness '{harness}'. "
+            f"Expected at {script}. See harnesses/<harness>/HARNESS.md."
+        )
+    return script
+
+
+def run_smoke(harness: str, task_dir: Path, model: str, limit: int, output_dir: Path) -> None:
+    script = harness_smoke_script(harness)
     output_dir.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        "uv", "run", "lm_eval",
-        "--tasks", task,
-        "--include_path", include_path,
-        "--model", model,
-        "--limit", str(limit),
-        "--output_path", str(output_dir),
-        "--log_samples",
-    ]
+    cmd = [str(script), str(task_dir), model, str(limit), str(output_dir)]
     print(f"$ {' '.join(cmd)}", file=sys.stderr)
     result = subprocess.run(cmd, capture_output=True, text=True)
     print(result.stdout, file=sys.stderr)
     print(result.stderr, file=sys.stderr)
     if result.returncode != 0:
-        raise SystemExit(f"lm_eval failed (exit {result.returncode})")
+        raise SystemExit(f"{harness}/smoke.sh failed (exit {result.returncode})")
 
-    # lm-eval writes results into a model-specific subdir; find the latest.
+
+def load_lm_eval_results(output_dir: Path, task_name: str) -> tuple[dict, list[dict]]:
+    """lm-eval-specific result loading. Other harnesses will need their own."""
     results_files = sorted(output_dir.rglob("results_*.json"))
     if not results_files:
-        raise SystemExit("No results_*.json produced by lm_eval")
+        raise SystemExit("No results_*.json produced by the smoke run")
     with results_files[-1].open() as f:
-        return json.load(f)
+        results = json.load(f)
+
+    samples_files = sorted(output_dir.rglob(f"samples_{task_name}_*.jsonl"))
+    samples: list[dict] = []
+    if samples_files:
+        with samples_files[-1].open() as f:
+            samples = [json.loads(line) for line in f]
+    return results, samples
 
 
-def find_samples(output_dir: Path, task: str) -> list[dict]:
-    samples_files = sorted(output_dir.rglob(f"samples_{task}_*.jsonl"))
-    if not samples_files:
-        return []
-    samples = []
-    with samples_files[-1].open() as f:
-        for line in f:
-            samples.append(json.loads(line))
-    return samples
-
-
-def render_report(task: str, model: str, limit: int, results: dict, samples: list[dict]) -> str:
-    task_results = results.get("results", {}).get(task, {})
+def render_lm_eval_report(task_name: str, model: str, limit: int,
+                          results: dict, samples: list[dict]) -> str:
+    task_results = results.get("results", {}).get(task_name, {})
     out = []
-    out.append(f"## Smoke run: `{task}`")
+    out.append(f"## Smoke run: `{task_name}` (harness: lm_eval)")
     out.append("")
     out.append(f"- **Model:** `{model}`")
     out.append(f"- **Sample size:** {limit}")
@@ -83,9 +102,9 @@ def render_report(task: str, model: str, limit: int, results: dict, samples: lis
         for i, s in enumerate(samples[:3], 1):
             doc = s.get("doc", {})
             target = s.get("target")
+            q = doc.get("question", "(no question field)")
             out.append(f"**Example {i}**")
             out.append("")
-            q = doc.get("question", "(no question field)")
             out.append(f"- Question: {q}")
             out.append(f"- Target: `{target}`")
             out.append("")
@@ -93,20 +112,47 @@ def render_report(task: str, model: str, limit: int, results: dict, samples: lis
     return "\n".join(out)
 
 
+def render_report(harness: str, task_name: str, model: str, limit: int,
+                  output_dir: Path) -> str:
+    """Dispatch report rendering per harness. Add new harnesses here as they're added."""
+    if harness == "lm_eval":
+        results, samples = load_lm_eval_results(output_dir, task_name)
+        return render_lm_eval_report(task_name, model, limit, results, samples)
+    # Fallback for harnesses that haven't grown a renderer yet: dump whatever
+    # the smoke.sh wrote, so the agent can still attach something useful to a PR.
+    out = [
+        f"## Smoke run: `{task_name}` (harness: {harness})",
+        "",
+        f"- **Model:** `{model}`",
+        f"- **Sample size:** {limit}",
+        "",
+        f"_No report renderer registered for harness `{harness}` yet._",
+        f"_Raw outputs are in `{output_dir}`._",
+    ]
+    return "\n".join(out)
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--task", required=True)
-    p.add_argument("--include-path", required=True, help="Directory containing the task YAML")
-    p.add_argument("--model", default="dummy", help="lm-eval model name (e.g. dummy, hf, anthropic)")
+    p.add_argument("--task", required=True,
+                   help="Task directory, e.g. tasks/lm_eval/starter_mcq")
+    p.add_argument("--model", default="dummy",
+                   help="Model name as understood by the harness (default: dummy)")
     p.add_argument("--limit", type=int, default=5)
-    p.add_argument("--out", required=True, help="Path to write the markdown report")
-    p.add_argument("--results-dir", default="out/smoke", help="Where to write lm-eval outputs")
+    p.add_argument("--out", required=True, help="Markdown report output path")
+    p.add_argument("--results-dir", default="out/smoke",
+                   help="Where the harness writes raw outputs")
     args = p.parse_args()
 
+    task_dir = Path(args.task)
+    if not task_dir.exists():
+        raise SystemExit(f"Task directory not found: {task_dir}")
+    task_name = task_dir.name
+    harness = identify_harness(task_dir)
+
     output_dir = Path(args.results_dir)
-    results = run_lm_eval(args.task, args.include_path, args.model, args.limit, output_dir)
-    samples = find_samples(output_dir, args.task)
-    report = render_report(args.task, args.model, args.limit, results, samples)
+    run_smoke(harness, task_dir, args.model, args.limit, output_dir)
+    report = render_report(harness, task_name, args.model, args.limit, output_dir)
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

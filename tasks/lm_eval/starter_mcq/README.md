@@ -22,7 +22,7 @@ Basic factual recall across mixed domains (geography, science, math, literature,
 ```bash
 uv run lm_eval \
   --tasks starter_mcq \
-  --include_path tasks/starter_mcq \
+  --include_path tasks/lm_eval/starter_mcq \
   --model dummy \
   --output_path out/
 ```
