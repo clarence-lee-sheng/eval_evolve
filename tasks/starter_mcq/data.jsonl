@@ -8,3 +8,5 @@
 {"id": "q8", "question": "What is the square root of 144?", "choices": ["10", "11", "12", "13"], "answer": 2}
 {"id": "q9", "question": "Which gas do plants primarily absorb from the atmosphere?", "choices": ["Oxygen", "Nitrogen", "Carbon dioxide", "Hydrogen"], "answer": 2}
 {"id": "q10", "question": "What is the smallest prime number?", "choices": ["0", "1", "2", "3"], "answer": 2}
+{"id": "q11", "question": "How many protons does a carbon atom have?", "choices": ["4", "6", "8", "12"], "answer": 1}
+{"id": "q12", "question": "What is the chemical symbol for sodium?", "choices": ["So", "Sd", "Na", "Nm"], "answer": 2}
