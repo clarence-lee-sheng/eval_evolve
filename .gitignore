@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+out/
+.DS_Store
+
+# Local Claude Code state — not for the public repo
+.claude/
+.agents/
+skills-lock.json

@@ -1,0 +1,10 @@
+{"id": "q1", "question": "What is the capital of France?", "choices": ["Berlin", "Madrid", "Paris", "Rome"], "answer": 2}
+{"id": "q2", "question": "Which planet is known as the Red Planet?", "choices": ["Venus", "Mars", "Jupiter", "Saturn"], "answer": 1}
+{"id": "q3", "question": "What is 7 multiplied by 8?", "choices": ["54", "56", "64", "72"], "answer": 1}
+{"id": "q4", "question": "Who wrote the play 'Romeo and Juliet'?", "choices": ["Charles Dickens", "Mark Twain", "William Shakespeare", "Jane Austen"], "answer": 2}
+{"id": "q5", "question": "What is the chemical symbol for gold?", "choices": ["Go", "Gd", "Au", "Ag"], "answer": 2}
+{"id": "q6", "question": "Which ocean is the largest by surface area?", "choices": ["Atlantic", "Indian", "Arctic", "Pacific"], "answer": 3}
+{"id": "q7", "question": "In what year did World War II end?", "choices": ["1943", "1944", "1945", "1946"], "answer": 2}
+{"id": "q8", "question": "What is the square root of 144?", "choices": ["10", "11", "12", "13"], "answer": 2}
+{"id": "q9", "question": "Which gas do plants primarily absorb from the atmosphere?", "choices": ["Oxygen", "Nitrogen", "Carbon dioxide", "Hydrogen"], "answer": 2}
+{"id": "q10", "question": "What is the smallest prime number?", "choices": ["0", "1", "2", "3"], "answer": 2}

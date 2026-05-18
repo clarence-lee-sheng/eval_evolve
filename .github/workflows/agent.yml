@@ -1,0 +1,60 @@
+name: agent
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  run-agent:
+    if: github.event.label.name == 'agent-ready'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Set up Python and install deps
+        run: |
+          uv python install 3.12
+          uv sync
+
+      - name: Run agent on issue
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--allowedTools Read,Edit,Write,Glob,Grep,Bash --max-turns 30"
+          prompt: |
+            You are the eval_evolve agent. Your standing instructions live at
+            `agent/prompts/system.md` — read them first and follow them exactly.
+
+            The plan-comment template is at `agent/prompts/plan_template.md`.
+            The PR-description template is at `agent/prompts/pr_template.md`.
+
+            ## Issue to handle
+
+            Issue number: #${{ github.event.issue.number }}
+            Title: ${{ github.event.issue.title }}
+
+            Body:
+            ${{ github.event.issue.body }}
+
+            ## Steps
+
+            1. Read `agent/prompts/system.md` for the rules of engagement.
+            2. Post a plan as a comment on issue #${{ github.event.issue.number }} using `gh issue comment`.
+            3. Create a feature branch named `agent/issue-${{ github.event.issue.number }}`.
+            4. Implement the change. Edit only files inside `tasks/`.
+            5. Verify with `uv run python scripts/smoke_run.py` at a depth appropriate to the change.
+            6. Commit, push, and open a PR using `gh pr create`. Use the PR-description template.
+            7. Do not merge.
